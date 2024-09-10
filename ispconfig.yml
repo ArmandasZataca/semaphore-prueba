@@ -29,9 +29,41 @@
         msg: "Actualización de repositorios y paquetes completa."
       when: apt_update_result is succeeded
 
+    # Solución al problema del directorio SSL y permisos
+    - name: Crear el directorio /etc/ssl/private/ si no existe
+      file:
+        path: /etc/ssl/private/
+        state: directory
+        owner: root
+        group: root
+        mode: '0700'
+
+    # Generación del certificado Pure-FTPd en /tmp
+    - name: Generar certificado SSL para Pure-FTPd en /tmp
+      shell: |
+        openssl req -x509 -nodes -days 7300 -newkey rsa:2048 \
+        -subj '/C=DE/ST=None/L=None/O=IT/CN=prueba.myguest.virtualbox.org' \
+        -keyout /tmp/pure-ftpd.pem -out /tmp/pure-ftpd.pem
+      register: cert_creation_result
+      ignore_errors: yes
+
+    # Mover el certificado generado en /tmp a /etc/ssl/private/
+    - name: Mover certificado Pure-FTPd a /etc/ssl/private/
+      command: mv /tmp/pure-ftpd.pem /etc/ssl/private/pure-ftpd.pem
+      when: cert_creation_result is succeeded
+
+    # Ajustar permisos del certificado SSL en /etc/ssl/private/
+    - name: Ajustar permisos del certificado Pure-FTPd en /etc/ssl/private/
+      file:
+        path: /etc/ssl/private/pure-ftpd.pem
+        owner: root
+        group: root
+        mode: '0600'
+      when: cert_creation_result is succeeded
+
     - name: Descargar e instalar ISPConfig con Nginx
       shell: |
-        echo "yes" | wget -O - https://get.ispconfig.org | sudo sh -s -- --use-nginx --use-ftp-ports=40110-40210 --unattended-upgrades
+        wget -O - https://get.ispconfig.org | sudo sh -s -- --use-nginx --use-ftp-ports=40110-40210 --unattended-upgrades --i-know-what-i-am-doing
       register: install_ispconfig_result
 
     - name: Verificar si la instalación de ISPConfig ha fallado
