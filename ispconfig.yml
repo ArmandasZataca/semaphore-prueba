@@ -18,21 +18,34 @@
         reboot_timeout: 600
       ignore_errors: yes
 
-    - name: Actualizar repositorios
+    - name: Actualizar repositorios y paquetes del sistema
       apt:
         update_cache: yes
         upgrade: dist
+      register: apt_update_result
+
+    - name: Verificar que la actualización de paquetes fue exitosa
+      debug:
+        msg: "Actualización de repositorios y paquetes completa."
+      when: apt_update_result is succeeded
 
     - name: Descargar e instalar ISPConfig con Nginx
-      shell: wget -O - https://get.ispconfig.org | sudo sh -s -- --use-nginx --use-ftp-ports=40110-40210 --unattended-upgrades
+      shell: |
+        echo "yes" | wget -O - https://get.ispconfig.org | sudo sh -s -- --use-nginx --use-ftp-ports=40110-40210 --unattended-upgrades
+      register: install_ispconfig_result
+
+    - name: Verificar si la instalación de ISPConfig ha fallado
+      debug:
+        msg: "Instalación de ISPConfig completa."
+      when: install_ispconfig_result is succeeded
 
     - name: Eliminar ficheros de instalación temporales de ISPConfig
       file:
         path: /tmp/ispconfig-ai/var/log/setup-*
         state: absent
-      when: install_ispconfig is succeeded
+      when: install_ispconfig_result is succeeded
 
-    - name: Configurar firewall usando UFW (alternativa)
+    - name: Configurar firewall usando UFW
       ufw:
         rule: allow
         port: "{{ item }}"
@@ -54,6 +67,12 @@
         - "53"
         - "8080"
         - "8081"
+      register: ufw_result
+
+    - name: Verificar si la configuración del firewall fue exitosa
+      debug:
+        msg: "Configuración del firewall UFW completada."
+      when: ufw_result is succeeded
 
     - name: Configurar SSH para permitir conexiones desde direcciones específicas
       lineinfile:
@@ -82,9 +101,8 @@
         - Restart nginx
 
     - name: Configurar Postfix para mejorar la seguridad
-      lineinfile:
+      blockinfile:
         path: /etc/postfix/main.cf
-        create: yes
         block: |
           smtpd_banner = $myhostname ESMTP
           disable_vrfy_command = yes
