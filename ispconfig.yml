@@ -36,7 +36,15 @@
         state: directory
         mode: '0755'
 
-    # Paso 6: Asegurar que el puerto SSH (22) está permitido en UFW solo para la red 192.168.0.0/24
+    # Paso 6: Asegurar que la directiva DebianBanner esté antes del bloque Match
+    - name: Asegurar que DebianBanner no esté dentro del bloque Match
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        insertafter: '^# override default of no subsystems'
+        line: 'DebianBanner no'
+        state: present
+
+    # Paso 7: Asegurar que el puerto SSH (22) está permitido en UFW solo para la red 192.168.0.0/24
     - name: Permitir SSH solo desde la red 192.168.0.0/24 en UFW
       ufw:
         rule: allow
@@ -45,7 +53,7 @@
         port: 22
         proto: tcp
 
-    # Paso 7: Configurar SSH para permitir solo conexiones desde la red 192.168.0.0/24
+    # Paso 8: Configurar SSH para permitir solo conexiones desde la red 192.168.0.0/24
     - name: Configurar SSH para permitir solo conexiones desde la red 192.168.0.0/24
       blockinfile:
         path: /etc/ssh/sshd_config
@@ -54,21 +62,13 @@
           PermitRootLogin yes
           PasswordAuthentication yes
 
-    # Paso 8: Asegurar que DebianBanner no esté dentro del bloque Match
-    - name: Asegurar que DebianBanner no esté dentro del bloque Match
-      lineinfile:
-        path: /etc/ssh/sshd_config
-        regexp: '^DebianBanner'
-        line: 'DebianBanner no'
-        state: present
-
     # Paso 9: Reiniciar el servicio SSH para aplicar cambios
     - name: Reiniciar el servicio SSH para aplicar cambios
       systemd:
         name: ssh
         state: restarted
-
-    # Paso 9: Crear el directorio /etc/ssl/private/ si no existe
+        
+    # Paso 10: Crear el directorio /etc/ssl/private/ si no existe
     - name: Crear el directorio /etc/ssl/private/ si no existe
       file:
         path: /etc/ssl/private/
@@ -77,7 +77,7 @@
         group: root
         mode: '0700'
 
-    # Paso 10: Generar certificado SSL para Pure-FTPd en /tmp
+    # Paso 11: Generar certificado SSL para Pure-FTPd en /tmp
     - name: Generar certificado SSL para Pure-FTPd en /tmp
       shell: |
         openssl req -x509 -nodes -days 7300 -newkey rsa:2048 \
@@ -86,12 +86,12 @@
       register: cert_creation_result
       ignore_errors: yes
 
-    # Paso 11: Mover certificado Pure-FTPd a /etc/ssl/private/
+    # Paso 12: Mover certificado Pure-FTPd a /etc/ssl/private/
     - name: Mover certificado Pure-FTPd a /etc/ssl/private/
       command: mv /tmp/pure-ftpd.pem /etc/ssl/private/pure-ftpd.pem
       when: cert_creation_result is succeeded
 
-    # Paso 12: Ajustar permisos del certificado SSL en /etc/ssl/private/
+    # Paso 13: Ajustar permisos del certificado SSL en /etc/ssl/private/
     - name: Ajustar permisos del certificado Pure-FTPd en /etc/ssl/private/
       file:
         path: /etc/ssl/private/pure-ftpd.pem
@@ -100,26 +100,26 @@
         mode: '0600'
       when: cert_creation_result is succeeded
 
-    # Paso 13: Descargar e instalar ISPConfig con Nginx
+    # Paso 14: Descargar e instalar ISPConfig con Nginx
     - name: Descargar e instalar ISPConfig con Nginx
       shell: |
         wget -O - https://get.ispconfig.org | sudo sh -s -- --use-nginx --use-ftp-ports=40110-40210 --unattended-upgrades --i-know-what-i-am-doing
       register: install_ispconfig_result
 
-    # Paso 14: Verificar si la instalación de ISPConfig ha fallado
+    # Paso 15: Verificar si la instalación de ISPConfig ha fallado
     - name: Verificar si la instalación de ISPConfig ha fallado
       debug:
         msg: "Instalación de ISPConfig completa."
       when: install_ispconfig_result is succeeded
 
-    # Paso 15: Eliminar ficheros de instalación temporales de ISPConfig
+    # Paso 16: Eliminar ficheros de instalación temporales de ISPConfig
     - name: Eliminar ficheros de instalación temporales de ISPConfig
       file:
         path: /tmp/ispconfig-ai/var/log/setup-*
         state: absent
       when: install_ispconfig_result is succeeded
 
-    # Paso 16: Configurar firewall UFW con los puertos necesarios para ISPConfig
+    # Paso 17: Configurar firewall UFW con los puertos necesarios para ISPConfig
     - name: Configurar firewall usando UFW
       ufw:
         rule: allow
@@ -149,7 +149,7 @@
         msg: "Configuración del firewall UFW completada."
       when: ufw_result is succeeded
 
-    # Paso 17: Configurar Nginx para ocultar tokens del servidor
+    # Paso 18: Configurar Nginx para ocultar tokens del servidor
     - name: Configurar Nginx para ocultar tokens del servidor
       blockinfile:
         path: /etc/nginx/nginx.conf
@@ -160,7 +160,7 @@
       notify:
         - Restart nginx
 
-    # Paso 18: Configurar Postfix para mejorar la seguridad
+    # Paso 19: Configurar Postfix para mejorar la seguridad
     - name: Configurar Postfix para mejorar la seguridad
       blockinfile:
         path: /etc/postfix/main.cf
@@ -173,7 +173,7 @@
       notify:
         - Restart postfix
 
-    # Paso 19: Configurar Dovecot para ocultar información sensible
+    # Paso 20: Configurar Dovecot para ocultar información sensible
     - name: Configurar Dovecot para ocultar información sensible
       blockinfile:
         path: /etc/dovecot/dovecot.conf
