@@ -2,15 +2,20 @@
 - hosts: all
   become: yes
   tasks:
+    # Paso 1: Actualizar repositorios y paquetes
+    - name: Actualizar repositorios y paquetes del sistema
+      apt:
+        update_cache: yes
+        upgrade: dist
 
+    # Paso 2: Asignar nombre de dominio en /etc/hosts
     - name: Asignar nombre de dominio en /etc/hosts
       lineinfile:
         path: /etc/hosts
         line: "127.0.1.1       ejemplo.zataca.com  ISPConfig"
         create: yes
-      notify:
-        - Reboot system
 
+    # Paso 3: Reiniciar el equipo para aplicar el nombre de dominio
     - name: Reiniciar el equipo para aplicar el nombre de dominio
       reboot:
         msg: "Reiniciando el equipo para aplicar el nombre de dominio."
@@ -18,18 +23,46 @@
         reboot_timeout: 600
       ignore_errors: yes
 
-    - name: Actualizar repositorios y paquetes del sistema
-      apt:
-        update_cache: yes
-        upgrade: dist
-      register: apt_update_result
+    # Paso 4: Verificar y crear el directorio /run/sshd si falta
+    - name: Crear el directorio /run/sshd si no existe
+      file:
+        path: /run/sshd
+        state: directory
+        mode: '0755'
 
-    - name: Verificar que la actualización de paquetes fue exitosa
-      debug:
-        msg: "Actualización de repositorios y paquetes completa."
-      when: apt_update_result is succeeded
+    # Paso 5: Asegurar que el puerto SSH (22) está permitido en UFW solo para la red 192.168.0.0/24
+    - name: Permitir SSH solo desde la red 192.168.0.0/24 en UFW
+      ufw:
+        rule: allow
+        from: 192.168.0.0/24
+        to: any
+        port: 22
+        proto: tcp
 
-    # Solución al problema del directorio SSL y permisos
+    # Paso 6: Configurar SSH para permitir solo conexiones desde la red 192.168.0.0/24
+    - name: Configurar SSH para permitir solo conexiones desde la red 192.168.0.0/24
+      blockinfile:
+        path: /etc/ssh/sshd_config
+        block: |
+          Match Address 192.168.0.0/24
+          PermitRootLogin yes
+          PasswordAuthentication yes
+
+    # Paso 7: Asegurar que DebianBanner no esté dentro del bloque Match
+    - name: Asegurar que DebianBanner no esté dentro del bloque Match
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^DebianBanner'
+        line: 'DebianBanner no'
+        state: present
+
+    # Paso 8: Reiniciar el servicio SSH para aplicar cambios
+    - name: Reiniciar el servicio SSH para aplicar cambios
+      systemd:
+        name: ssh
+        state: restarted
+
+    # Paso 9: Crear el directorio /etc/ssl/private/ si no existe
     - name: Crear el directorio /etc/ssl/private/ si no existe
       file:
         path: /etc/ssl/private/
@@ -38,7 +71,7 @@
         group: root
         mode: '0700'
 
-    # Generación del certificado Pure-FTPd en /tmp
+    # Paso 10: Generar certificado SSL para Pure-FTPd en /tmp
     - name: Generar certificado SSL para Pure-FTPd en /tmp
       shell: |
         openssl req -x509 -nodes -days 7300 -newkey rsa:2048 \
@@ -47,12 +80,12 @@
       register: cert_creation_result
       ignore_errors: yes
 
-    # Mover el certificado generado en /tmp a /etc/ssl/private/
+    # Paso 11: Mover certificado Pure-FTPd a /etc/ssl/private/
     - name: Mover certificado Pure-FTPd a /etc/ssl/private/
       command: mv /tmp/pure-ftpd.pem /etc/ssl/private/pure-ftpd.pem
       when: cert_creation_result is succeeded
 
-    # Ajustar permisos del certificado SSL en /etc/ssl/private/
+    # Paso 12: Ajustar permisos del certificado SSL en /etc/ssl/private/
     - name: Ajustar permisos del certificado Pure-FTPd en /etc/ssl/private/
       file:
         path: /etc/ssl/private/pure-ftpd.pem
@@ -61,22 +94,26 @@
         mode: '0600'
       when: cert_creation_result is succeeded
 
+    # Paso 13: Descargar e instalar ISPConfig con Nginx
     - name: Descargar e instalar ISPConfig con Nginx
       shell: |
         wget -O - https://get.ispconfig.org | sudo sh -s -- --use-nginx --use-ftp-ports=40110-40210 --unattended-upgrades --i-know-what-i-am-doing
       register: install_ispconfig_result
 
+    # Paso 14: Verificar si la instalación de ISPConfig ha fallado
     - name: Verificar si la instalación de ISPConfig ha fallado
       debug:
         msg: "Instalación de ISPConfig completa."
       when: install_ispconfig_result is succeeded
 
+    # Paso 15: Eliminar ficheros de instalación temporales de ISPConfig
     - name: Eliminar ficheros de instalación temporales de ISPConfig
       file:
         path: /tmp/ispconfig-ai/var/log/setup-*
         state: absent
       when: install_ispconfig_result is succeeded
 
+    # Paso 16: Configurar firewall UFW con los puertos necesarios para ISPConfig
     - name: Configurar firewall usando UFW
       ufw:
         rule: allow
@@ -106,22 +143,7 @@
         msg: "Configuración del firewall UFW completada."
       when: ufw_result is succeeded
 
-    - name: Configurar SSH para permitir conexiones desde direcciones específicas
-      lineinfile:
-        path: /etc/ssh/sshd_config
-        line: "Match Address 145.239.244.94,54.38.222.93,51.89.8.62,192.168.0.0/16\n PermitRootLogin yes\n PasswordAuthentication yes"
-        create: yes
-      notify:
-        - Restart sshd
-
-    - name: Configurar OpenSSH para ocultar información del banner
-      lineinfile:
-        path: /etc/ssh/sshd_config
-        line: "DebianBanner no"
-        create: yes
-      notify:
-        - Restart sshd
-
+    # Paso 17: Configurar Nginx para ocultar tokens del servidor
     - name: Configurar Nginx para ocultar tokens del servidor
       blockinfile:
         path: /etc/nginx/nginx.conf
@@ -132,6 +154,7 @@
       notify:
         - Restart nginx
 
+    # Paso 18: Configurar Postfix para mejorar la seguridad
     - name: Configurar Postfix para mejorar la seguridad
       blockinfile:
         path: /etc/postfix/main.cf
@@ -144,6 +167,7 @@
       notify:
         - Restart postfix
 
+    # Paso 19: Configurar Dovecot para ocultar información sensible
     - name: Configurar Dovecot para ocultar información sensible
       blockinfile:
         path: /etc/dovecot/dovecot.conf
@@ -157,21 +181,21 @@
         - Restart dovecot
 
   handlers:
-    - name: Reboot system
-      reboot:
-        msg: "Reiniciando el equipo..."
     - name: Restart sshd
       systemd:
-        name: sshd
+        name: ssh
         state: restarted
+
     - name: Restart nginx
       systemd:
         name: nginx
         state: restarted
+
     - name: Restart postfix
       systemd:
         name: postfix
         state: restarted
+
     - name: Restart dovecot
       systemd:
         name: dovecot
