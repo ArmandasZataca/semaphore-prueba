@@ -106,15 +106,15 @@
         wget -O - https://get.ispconfig.org | sudo sh -s -- --use-nginx --use-ftp-ports=40110-40210 --unattended-upgrades --i-know-what-i-am-doing
       register: install_ispconfig_result
 
-    # Paso 15: Mostrar contraseñas generadas por la instalación
+    # Paso 15: Mostrar contraseñas generadas durante la instalación de ISPConfig
     - name: Mostrar contraseñas generadas durante la instalación de ISPConfig
-      shell: cat /tmp/ispconfig-ai/var/log/setup-*
+      shell: cat /tmp/ispconfig-ai/var/log/setup-* | grep -E 'Your ISPConfig admin password|Your MySQL root password'
       register: ispconfig_passwords_output
       when: install_ispconfig_result is succeeded
 
-    - name: Mostrar contraseñas en el log de Ansible
+    - name: Mostrar contraseñas en el log de Ansible de manera legible
       debug:
-        var: ispconfig_passwords_output.stdout
+        msg: "{{ ispconfig_passwords_output.stdout }}"
       when: install_ispconfig_result is succeeded
 
     # Paso 16: Eliminar ficheros de instalación temporales de ISPConfig
@@ -156,12 +156,14 @@
 
     # Paso 18: Configurar Nginx para ocultar tokens del servidor
     - name: Configurar Nginx para ocultar tokens del servidor
-      lineinfile:
+      blockinfile:
         path: /etc/nginx/nginx.conf
-        regexp: '^\s*#?\s*server_tokens\s+'
-        line: 'server_tokens off;'
-        state: present
-        insertafter: '^\s*http\s*{'
+        block: |
+          http {
+            server_tokens off;
+          }
+      notify:
+        - Restart nginx
 
     # Paso 19: Configurar Postfix para mejorar la seguridad
     - name: Configurar Postfix para mejorar la seguridad
