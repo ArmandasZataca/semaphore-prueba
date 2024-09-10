@@ -151,14 +151,12 @@
 
     # Paso 18: Configurar Nginx para ocultar tokens del servidor
     - name: Configurar Nginx para ocultar tokens del servidor
-      blockinfile:
+      lineinfile:
         path: /etc/nginx/nginx.conf
-        block: |
-          http {
-            server_tokens off;
-          }
-      notify:
-        - Restart nginx
+        regexp: '^\s*#?\s*server_tokens\s+'
+        line: 'server_tokens off;'
+        state: present
+        insertafter: '^\s*http\s*{'
 
     # Paso 19: Configurar Postfix para mejorar la seguridad
     - name: Configurar Postfix para mejorar la seguridad
