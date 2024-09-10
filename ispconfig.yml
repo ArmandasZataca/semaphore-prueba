@@ -23,14 +23,20 @@
         reboot_timeout: 600
       ignore_errors: yes
 
-    # Paso 4: Verificar y crear el directorio /run/sshd si falta
+    # Paso 4: Instalar UFW si no está presente
+    - name: Instalar UFW si no está presente
+      apt:
+        name: ufw
+        state: present
+
+    # Paso 5: Verificar y crear el directorio /run/sshd si falta
     - name: Crear el directorio /run/sshd si no existe
       file:
         path: /run/sshd
         state: directory
         mode: '0755'
 
-    # Paso 5: Asegurar que el puerto SSH (22) está permitido en UFW solo para la red 192.168.0.0/24
+    # Paso 6: Asegurar que el puerto SSH (22) está permitido en UFW solo para la red 192.168.0.0/24
     - name: Permitir SSH solo desde la red 192.168.0.0/24 en UFW
       ufw:
         rule: allow
@@ -39,7 +45,7 @@
         port: 22
         proto: tcp
 
-    # Paso 6: Configurar SSH para permitir solo conexiones desde la red 192.168.0.0/24
+    # Paso 7: Configurar SSH para permitir solo conexiones desde la red 192.168.0.0/24
     - name: Configurar SSH para permitir solo conexiones desde la red 192.168.0.0/24
       blockinfile:
         path: /etc/ssh/sshd_config
@@ -48,7 +54,7 @@
           PermitRootLogin yes
           PasswordAuthentication yes
 
-    # Paso 7: Asegurar que DebianBanner no esté dentro del bloque Match
+    # Paso 8: Asegurar que DebianBanner no esté dentro del bloque Match
     - name: Asegurar que DebianBanner no esté dentro del bloque Match
       lineinfile:
         path: /etc/ssh/sshd_config
@@ -56,7 +62,7 @@
         line: 'DebianBanner no'
         state: present
 
-    # Paso 8: Reiniciar el servicio SSH para aplicar cambios
+    # Paso 9: Reiniciar el servicio SSH para aplicar cambios
     - name: Reiniciar el servicio SSH para aplicar cambios
       systemd:
         name: ssh
