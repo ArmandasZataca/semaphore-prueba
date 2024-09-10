@@ -106,10 +106,15 @@
         wget -O - https://get.ispconfig.org | sudo sh -s -- --use-nginx --use-ftp-ports=40110-40210 --unattended-upgrades --i-know-what-i-am-doing
       register: install_ispconfig_result
 
-    # Paso 15: Verificar si la instalación de ISPConfig ha fallado
-    - name: Verificar si la instalación de ISPConfig ha fallado
+    # Paso 15: Mostrar contraseñas generadas por la instalación
+    - name: Mostrar contraseñas generadas durante la instalación de ISPConfig
+      shell: cat /tmp/ispconfig-ai/var/log/setup-*
+      register: ispconfig_passwords_output
+      when: install_ispconfig_result is succeeded
+
+    - name: Mostrar contraseñas en el log de Ansible
       debug:
-        msg: "Instalación de ISPConfig completa."
+        var: ispconfig_passwords_output.stdout
       when: install_ispconfig_result is succeeded
 
     # Paso 16: Eliminar ficheros de instalación temporales de ISPConfig
