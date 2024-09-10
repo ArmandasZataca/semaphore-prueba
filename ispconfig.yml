@@ -1,0 +1,123 @@
+---
+- hosts: all
+  become: yes
+  tasks:
+
+    - name: Asignar nombre de dominio en /etc/hosts
+      lineinfile:
+        path: /etc/hosts
+        line: "127.0.1.1       ejemplo.zataca.com  ISPConfig"
+        create: yes
+      notify:
+        - Reboot system
+
+    - name: Reiniciar el equipo para aplicar el nombre de dominio
+      reboot:
+        msg: "Reiniciando el equipo para aplicar el nombre de dominio."
+        connect_timeout: 5
+        reboot_timeout: 600
+      ignore_errors: yes
+
+    - name: Actualizar repositorios
+      apt:
+        update_cache: yes
+        upgrade: dist
+
+    - name: Descargar e instalar ISPConfig con Nginx
+      shell: wget -O - https://get.ispconfig.org | sudo sh -s -- --use-nginx --use-ftp-ports=40110-40210 --unattended-upgrades
+      args:
+        warn: no
+      register: install_ispconfig
+      ignore_errors: yes
+
+    - name: Eliminar ficheros de instalación temporales de ISPConfig
+      file:
+        path: /tmp/ispconfig-ai/var/log/setup-*
+        state: absent
+      when: install_ispconfig is succeeded
+
+    - name: Configurar firewall en ISPConfig
+      blockinfile:
+        path: /etc/iptables/rules.v4
+        block: |
+          # Puertos permitidos por ISPConfig
+          -A INPUT -p tcp -m multiport --dports 20,21,22,25,80,443,40110:40210,110,143,465,587,993,995,53,8080,8081 -j ACCEPT
+          -A INPUT -p udp --dport 53 -j ACCEPT
+      notify:
+        - Restart firewall
+
+    - name: Configurar SSH para permitir conexiones desde direcciones específicas
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        line: "Match Address 145.239.244.94,54.38.222.93,51.89.8.62,192.168.0.0/16\n PermitRootLogin yes\n PasswordAuthentication yes"
+        create: yes
+      notify:
+        - Restart sshd
+
+    - name: Configurar OpenSSH para ocultar información del banner
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        line: "DebianBanner no"
+        create: yes
+      notify:
+        - Restart sshd
+
+    - name: Configurar Nginx para ocultar tokens del servidor
+      blockinfile:
+        path: /etc/nginx/nginx.conf
+        block: |
+          http {
+            server_tokens off;
+          }
+      notify:
+        - Restart nginx
+
+    - name: Configurar Postfix para mejorar la seguridad
+      lineinfile:
+        path: /etc/postfix/main.cf
+        create: yes
+        block: |
+          smtpd_banner = $myhostname ESMTP
+          disable_vrfy_command = yes
+          smtpd_tls_received_header = no
+          smtpd_tls_session_cache_database = btree:${data_directory}/smtpd_scache
+          smtpd_tls_loglevel = 1
+      notify:
+        - Restart postfix
+
+    - name: Configurar Dovecot para ocultar información sensible
+      blockinfile:
+        path: /etc/dovecot/dovecot.conf
+        block: |
+          mail_privileged_group = mail
+          disable_plaintext_auth = yes
+          verbose_proctitle = no
+          mail_plugins = $mail_plugins imap
+          auth_verbose = no
+      notify:
+        - Restart dovecot
+
+  handlers:
+    - name: Reboot system
+      reboot:
+        msg: "Reiniciando el equipo..."
+    - name: Restart sshd
+      systemd:
+        name: sshd
+        state: restarted
+    - name: Restart nginx
+      systemd:
+        name: nginx
+        state: restarted
+    - name: Restart postfix
+      systemd:
+        name: postfix
+        state: restarted
+    - name: Restart dovecot
+      systemd:
+        name: dovecot
+        state: restarted
+    - name: Restart firewall
+      systemd:
+        name: iptables
+        state: restarted
