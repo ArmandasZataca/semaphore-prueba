@@ -158,14 +158,13 @@
         msg: "Configuración del firewall UFW completada."
       when: ufw_result is succeeded
 
-    # Paso 20: Configurar Nginx para ocultar tokens del servidor
+    # Paso 20: Configurar Nginx para ocultar tokens del servidor sin crear un bloque http duplicado
     - name: Configurar Nginx para ocultar tokens del servidor
-      blockinfile:
+      lineinfile:
         path: /etc/nginx/nginx.conf
-        block: |
-          http {
-            server_tokens off;
-          }
+        regexp: '^(\s*)server_tokens\s+.*$'
+        line: 'server_tokens off;'
+        state: present
       notify:
         - Restart nginx
 
