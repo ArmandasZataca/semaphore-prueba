@@ -14,7 +14,7 @@
         sudo locale-gen es_ES.UTF-8
         sudo update-locale LANG=es_ES.UTF-8
 
-    # Paso 3: Configurar zona horaria a Europe/Madrid
+    # Paso 3: Configurar la zona horaria a Europe/Madrid
     - name: Configurar la zona horaria a Europe/Madrid
       command: timedatectl set-timezone Europe/Madrid
 
@@ -24,11 +24,13 @@
         name: ntp
         state: present
 
-    # Paso 5: Instalar Postgres 12
+    # Paso 5: Instalar repositorios de Postgres y Postgres 12
     - name: Instalar repositorios de Postgres y Postgres 12
       shell: |
+        export DEBIAN_FRONTEND=noninteractive
         sudo apt install -y postgresql-common
-        sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh
+        echo | sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh
+        sudo apt update
         sudo apt install -y postgresql-12
 
     # Paso 6: Asignar nombre de dominio en /etc/hosts
@@ -201,9 +203,4 @@
     - name: Restart postfix
       systemd:
         name: postfix
-        state: restarted
-
-    - name: Restart dovecot
-      systemd:
-        name: dovecot
         state: restarted
