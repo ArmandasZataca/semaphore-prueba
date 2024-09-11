@@ -67,7 +67,7 @@
       systemd:
         name: ssh
         state: restarted
-        
+
     # Paso 10: Crear el directorio /etc/ssl/private/ si no existe
     - name: Crear el directorio /etc/ssl/private/ si no existe
       file:
@@ -106,15 +106,10 @@
         wget -O - https://get.ispconfig.org | sudo sh -s -- --use-nginx --use-ftp-ports=40110-40210 --unattended-upgrades --i-know-what-i-am-doing
       register: install_ispconfig_result
 
-    # Paso 15: Mostrar contraseñas generadas durante la instalación de ISPConfig
-    - name: Mostrar contraseñas generadas durante la instalación de ISPConfig
-      shell: cat /tmp/ispconfig-ai/var/log/setup-* | grep -E 'Your ISPConfig admin password|Your MySQL root password'
-      register: ispconfig_passwords_output
-      when: install_ispconfig_result is succeeded
-
-    - name: Mostrar contraseñas en el log de Ansible de manera legible
+    # Paso 15: Verificar si la instalación de ISPConfig ha fallado
+    - name: Verificar si la instalación de ISPConfig ha fallado
       debug:
-        msg: "{{ ispconfig_passwords_output.stdout }}"
+        msg: "Instalación de ISPConfig completa."
       when: install_ispconfig_result is succeeded
 
     # Paso 16: Eliminar ficheros de instalación temporales de ISPConfig
@@ -154,14 +149,12 @@
         msg: "Configuración del firewall UFW completada."
       when: ufw_result is succeeded
 
-    # Paso 18: Configurar Nginx para ocultar tokens del servidor
+    # Paso 18: Configurar Nginx para ocultar tokens del servidor en el bloque existente
     - name: Configurar Nginx para ocultar tokens del servidor
-      blockinfile:
+      lineinfile:
         path: /etc/nginx/nginx.conf
-        block: |
-          http {
-            server_tokens off;
-          }
+        insertafter: '^http {'
+        line: '    server_tokens off;'
       notify:
         - Restart nginx
 
