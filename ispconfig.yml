@@ -10,9 +10,9 @@
 
     # Paso 2: Configurar locales a es_ES.UTF-8
     - name: Configurar locales a es_ES.UTF-8
-      shell: |
-        sudo locale-gen es_ES.UTF-8
-        sudo update-locale LANG=es_ES.UTF-8
+      locale_gen:
+        name: es_ES.UTF-8
+        state: present
 
     # Paso 3: Configurar la zona horaria a Europe/Madrid
     - name: Configurar la zona horaria a Europe/Madrid
@@ -24,12 +24,11 @@
         name: ntp
         state: present
 
-    # Paso 5: Instalar repositorios de Postgres y Postgres 12 sin interacción
+    # Paso 5: Instalar repositorios de Postgres y Postgres 12
     - name: Instalar repositorios de Postgres y Postgres 12
       shell: |
-        sudo apt install -y postgresql-common
-        yes "" | sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh  # Evitar la pausa interactiva
-        sudo apt install -y postgresql-12
+        sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh
+        sudo apt-get install -y postgresql-12
 
     # Paso 6: Asignar nombre de dominio en /etc/hosts
     - name: Asignar nombre de dominio en /etc/hosts
@@ -52,14 +51,14 @@
         name: ufw
         state: present
 
-    # Paso 9: Crear el directorio /run/sshd si no existe
+    # Paso 9: Verificar y crear el directorio /run/sshd si falta
     - name: Crear el directorio /run/sshd si no existe
       file:
         path: /run/sshd
         state: directory
         mode: '0755'
 
-    # Paso 10: Asegurar que DebianBanner no esté dentro del bloque Match
+    # Paso 10: Asegurar que la directiva DebianBanner esté antes del bloque Match
     - name: Asegurar que DebianBanner no esté dentro del bloque Match
       lineinfile:
         path: /etc/ssh/sshd_config
@@ -67,7 +66,16 @@
         line: 'DebianBanner no'
         state: present
 
-    # Paso 11: Configurar SSH para permitir solo conexiones desde la red 192.168.0.0/24
+    # Paso 11: Asegurar que el puerto SSH (22) está permitido en UFW solo para la red 192.168.0.0/24
+    - name: Permitir SSH solo desde la red 192.168.0.0/24 en UFW
+      ufw:
+        rule: allow
+        from: 192.168.0.0/24
+        to: any
+        port: 22
+        proto: tcp
+
+    # Paso 12: Configurar SSH para permitir solo conexiones desde la red 192.168.0.0/24
     - name: Configurar SSH para permitir solo conexiones desde la red 192.168.0.0/24
       blockinfile:
         path: /etc/ssh/sshd_config
@@ -76,13 +84,13 @@
           PermitRootLogin yes
           PasswordAuthentication yes
 
-    # Paso 12: Reiniciar el servicio SSH para aplicar cambios
+    # Paso 13: Reiniciar el servicio SSH para aplicar cambios
     - name: Reiniciar el servicio SSH para aplicar cambios
       systemd:
         name: ssh
         state: restarted
-
-    # Paso 13: Generar certificado SSL para Pure-FTPd en /tmp
+        
+    # Paso 14: Generar certificado SSL para Pure-FTPd en /tmp
     - name: Generar certificado SSL para Pure-FTPd en /tmp
       shell: |
         openssl req -x509 -nodes -days 7300 -newkey rsa:2048 \
@@ -91,12 +99,12 @@
       register: cert_creation_result
       ignore_errors: yes
 
-    # Paso 14: Mover certificado Pure-FTPd a /etc/ssl/private/
+    # Paso 15: Mover certificado Pure-FTPd a /etc/ssl/private/
     - name: Mover certificado Pure-FTPd a /etc/ssl/private/
       command: mv /tmp/pure-ftpd.pem /etc/ssl/private/pure-ftpd.pem
       when: cert_creation_result is succeeded
 
-    # Paso 15: Ajustar permisos del certificado SSL en /etc/ssl/private/
+    # Paso 16: Ajustar permisos del certificado SSL en /etc/ssl/private/
     - name: Ajustar permisos del certificado Pure-FTPd en /etc/ssl/private/
       file:
         path: /etc/ssl/private/pure-ftpd.pem
@@ -105,30 +113,26 @@
         mode: '0600'
       when: cert_creation_result is succeeded
 
-    # Paso 16: Descargar e instalar ISPConfig con Nginx y capturar las contraseñas directamente
+    # Paso 17: Descargar e instalar ISPConfig con Nginx
     - name: Descargar e instalar ISPConfig con Nginx
       shell: |
-        wget -O - https://get.ispconfig.org | sudo sh -s -- --use-nginx --use-ftp-ports=40110-40210 --unattended-upgrades --i-know-what-i-am-doing 2>&1 | tee /tmp/ispconfig_install.log
+        wget -O - https://get.ispconfig.org | sudo sh -s -- --use-nginx --use-ftp-ports=40110-40210 --unattended-upgrades --i-know-what-i-am-doing
       register: install_ispconfig_result
 
-    # Paso 17: Mostrar contraseñas de ISPConfig directamente desde la salida de la instalación
-    - name: Mostrar contraseñas de ISPConfig
-      shell: |
-        grep -E "(Your ISPConfig admin password is|Your MySQL root password is)" /tmp/ispconfig_install.log
-      register: ispconfig_passwords_output
-
-    - name: Mostrar contraseñas en el log de Ansible
+    # Paso 18: Verificar si la instalación de ISPConfig ha fallado
+    - name: Verificar si la instalación de ISPConfig ha fallado
       debug:
-        msg: "{{ ispconfig_passwords_output.stdout }}"
+        msg: "Instalación de ISPConfig completa."
+      when: install_ispconfig_result is succeeded
 
-    # Paso 18: Eliminar ficheros de instalación temporales de ISPConfig
+    # Paso 19: Eliminar ficheros de instalación temporales de ISPConfig
     - name: Eliminar ficheros de instalación temporales de ISPConfig
       file:
         path: /tmp/ispconfig-ai/var/log/setup-*
         state: absent
       when: install_ispconfig_result is succeeded
 
-    # Paso 19: Configurar firewall UFW con los puertos necesarios para ISPConfig
+    # Paso 20: Configurar firewall UFW con los puertos necesarios para ISPConfig
     - name: Configurar firewall usando UFW
       ufw:
         rule: allow
@@ -158,17 +162,17 @@
         msg: "Configuración del firewall UFW completada."
       when: ufw_result is succeeded
 
-    # Paso 20: Configurar Nginx para ocultar tokens del servidor sin crear un bloque http duplicado
-    - name: Configurar Nginx para ocultar tokens del servidor
-      lineinfile:
+    # Paso 21: Asegurar que 'server_tokens off;' esté dentro del bloque http
+    - name: Asegurar que 'server_tokens off;' esté dentro del bloque http
+      blockinfile:
         path: /etc/nginx/nginx.conf
-        regexp: '^(\s*)server_tokens\s+.*$'
-        line: 'server_tokens off;'
-        state: present
+        block: |
+          server_tokens off;
+        insertafter: "http {"
       notify:
         - Restart nginx
 
-    # Paso 21: Configurar Postfix para mejorar la seguridad
+    # Paso 22: Configurar Postfix para mejorar la seguridad
     - name: Configurar Postfix para mejorar la seguridad
       blockinfile:
         path: /etc/postfix/main.cf
@@ -181,7 +185,7 @@
       notify:
         - Restart postfix
 
-    # Paso 22: Configurar Dovecot para ocultar información sensible
+    # Paso 23: Configurar Dovecot para ocultar información sensible
     - name: Configurar Dovecot para ocultar información sensible
       blockinfile:
         path: /etc/dovecot/dovecot.conf
@@ -193,6 +197,18 @@
           auth_verbose = no
       notify:
         - Restart dovecot
+
+    # Paso 24: Mostrar contraseñas de ISPConfig
+    - name: Mostrar contraseñas de ISPConfig
+      shell: |
+        grep -E "(Your ISPConfig admin password is|Your MySQL root password is)" /tmp/ispconfig-ai/var/log/setup-*
+      register: ispconfig_passwords_output
+      failed_when: ispconfig_passwords_output.rc != 0
+      changed_when: false
+
+    - name: Mostrar contraseñas en el log de Ansible
+      debug:
+        var: ispconfig_passwords_output.stdout
 
   handlers:
     - name: Restart sshd
