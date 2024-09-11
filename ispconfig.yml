@@ -130,7 +130,6 @@
         name: "{{ item }}"
         state: present
       loop:
-        - chromium-browser
         - libnss3
         - libatk1.0-0
         - libatk-bridge2.0-0
