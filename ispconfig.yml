@@ -112,14 +112,24 @@
         msg: "Instalación de ISPConfig completa."
       when: install_ispconfig_result is succeeded
 
-    # Paso 16: Eliminar ficheros de instalación temporales de ISPConfig
+    # Paso 16: Mostrar las contraseñas de ISPConfig
+    - name: Mostrar contraseñas de ISPConfig
+      shell: |
+        grep -E "(Your ISPConfig admin password is|Your MySQL root password is)" /tmp/ispconfig-ai/var/log/setup-*
+      register: ispconfig_passwords_output
+
+    - name: Mostrar contraseñas en el log de Ansible
+      debug:
+        msg: "{{ ispconfig_passwords_output.stdout }}"
+
+    # Paso 17: Eliminar ficheros de instalación temporales de ISPConfig
     - name: Eliminar ficheros de instalación temporales de ISPConfig
       file:
         path: /tmp/ispconfig-ai/var/log/setup-*
         state: absent
       when: install_ispconfig_result is succeeded
 
-    # Paso 17: Configurar firewall UFW con los puertos necesarios para ISPConfig
+    # Paso 18: Configurar firewall UFW con los puertos necesarios para ISPConfig
     - name: Configurar firewall usando UFW
       ufw:
         rule: allow
@@ -149,16 +159,16 @@
         msg: "Configuración del firewall UFW completada."
       when: ufw_result is succeeded
 
-    # Paso 18: Configurar Nginx para ocultar tokens del servidor en el bloque existente
+    # Paso 19: Configurar Nginx para ocultar tokens del servidor
     - name: Configurar Nginx para ocultar tokens del servidor
       lineinfile:
         path: /etc/nginx/nginx.conf
-        insertafter: '^http {'
-        line: '    server_tokens off;'
+        regexp: '^\s*server_tokens\s+'
+        line: 'server_tokens off;'
       notify:
         - Restart nginx
 
-    # Paso 19: Configurar Postfix para mejorar la seguridad
+    # Paso 20: Configurar Postfix para mejorar la seguridad
     - name: Configurar Postfix para mejorar la seguridad
       blockinfile:
         path: /etc/postfix/main.cf
@@ -171,7 +181,7 @@
       notify:
         - Restart postfix
 
-    # Paso 20: Configurar Dovecot para ocultar información sensible
+    # Paso 21: Configurar Dovecot para ocultar información sensible
     - name: Configurar Dovecot para ocultar información sensible
       blockinfile:
         path: /etc/dovecot/dovecot.conf
