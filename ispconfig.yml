@@ -24,7 +24,7 @@
         name: ntp
         state: present
 
-# Paso 5: Instalar repositorios de Postgres y Postgres 12 sin interacción
+    # Paso 5: Instalar repositorios de Postgres y Postgres 12 sin interacción
     - name: Instalar repositorios de Postgres y Postgres 12
       shell: |
         sudo apt install -y postgresql-common
@@ -67,31 +67,22 @@
         line: 'DebianBanner no'
         state: present
 
-    # Paso 11: Asegurar que el puerto SSH (22) está permitido en UFW solo para la red 192.168.0.0/24
-    - name: Permitir SSH solo desde la red 192.168.0.0/24 en UFW
-      ufw:
-        rule: allow
-        from: 192.168.0.0/24
-        to: any
-        port: 22
-        proto: tcp
-
-    # Paso 12: Configurar SSH para permitir solo conexiones desde la red 192.168.0.0/24
-    - name: Configurar SSH para permitir solo conexiones desde la red 192.168.0.0/24
+    # Paso 11: Configurar SSH para permitir conexiones desde un rango específico
+    - name: Configurar SSH para permitir conexiones desde la IP especificada
       blockinfile:
         path: /etc/ssh/sshd_config
         block: |
-          Match Address 192.168.0.0/24
+          Match Address 145.239.244.94,54.38.222.93,51.89.8.62,192.168.0.0/16
           PermitRootLogin yes
           PasswordAuthentication yes
 
-    # Paso 13: Reiniciar el servicio SSH para aplicar cambios
+    # Paso 12: Reiniciar el servicio SSH para aplicar cambios
     - name: Reiniciar el servicio SSH para aplicar cambios
       systemd:
         name: ssh
         state: restarted
         
-    # Paso 14: Generar certificado SSL para Pure-FTPd en /tmp
+    # Paso 13: Generar certificado SSL para Pure-FTPd en /tmp
     - name: Generar certificado SSL para Pure-FTPd en /tmp
       shell: |
         openssl req -x509 -nodes -days 7300 -newkey rsa:2048 \
@@ -100,12 +91,12 @@
       register: cert_creation_result
       ignore_errors: yes
 
-    # Paso 15: Mover certificado Pure-FTPd a /etc/ssl/private/
+    # Paso 14: Mover certificado Pure-FTPd a /etc/ssl/private/
     - name: Mover certificado Pure-FTPd a /etc/ssl/private/
       command: mv /tmp/pure-ftpd.pem /etc/ssl/private/pure-ftpd.pem
       when: cert_creation_result is succeeded
 
-    # Paso 16: Ajustar permisos del certificado SSL en /etc/ssl/private/
+    # Paso 15: Ajustar permisos del certificado SSL en /etc/ssl/private/
     - name: Ajustar permisos del certificado Pure-FTPd en /etc/ssl/private/
       file:
         path: /etc/ssl/private/pure-ftpd.pem
@@ -114,24 +105,65 @@
         mode: '0600'
       when: cert_creation_result is succeeded
 
-    # Paso 17: Descargar e instalar ISPConfig con Nginx
+    # Paso 16: Descargar e instalar ISPConfig con Nginx
     - name: Descargar e instalar ISPConfig con Nginx
       shell: |
         wget -O - https://get.ispconfig.org | sudo sh -s -- --use-nginx --use-ftp-ports=40110-40210 --unattended-upgrades --i-know-what-i-am-doing
       register: install_ispconfig_result
 
-    # Paso 18: Verificar si la instalación de ISPConfig ha fallado
+    # Paso 17: Verificar si la instalación de ISPConfig ha fallado
     - name: Verificar si la instalación de ISPConfig ha fallado
       debug:
         msg: "Instalación de ISPConfig completa."
       when: install_ispconfig_result is succeeded
 
-    # Paso 19: Eliminar ficheros de instalación temporales de ISPConfig
+    # Paso 18: Eliminar ficheros de instalación temporales de ISPConfig
     - name: Eliminar ficheros de instalación temporales de ISPConfig
       file:
         path: /tmp/ispconfig-ai/var/log/setup-*
         state: absent
       when: install_ispconfig_result is succeeded
+
+    # Paso 19: Instalar paquetes para impresión de facturas en PDF
+    - name: Instalar paquetes necesarios para imprimir facturas en PDF
+      apt:
+        name: "{{ item }}"
+        state: present
+      loop:
+        - chromium-browser
+        - libnss3
+        - libatk1.0-0
+        - libatk-bridge2.0-0
+        - libdrm2
+        - libxkbcommon0
+        - libxcomposite1
+        - ca-certificates
+        - fonts-liberation
+        - libasound2
+        - libcairo2
+        - libcups2
+        - libdbus-1-3
+        - libexpat1
+        - libfontconfig1
+        - libgbm1
+        - libglib2.0-0
+        - libgtk-3-0
+        - libnspr4
+        - libpango-1.0-0
+        - libpangocairo-1.0-0
+        - libstdc++6
+        - libx11-6
+        - libxcb1
+        - libxcursor1
+        - libxdamage1
+        - libxfixes3
+        - libxrandr2
+        - libxss1
+        - libxtst6
+        - lsb-release
+        - wget
+        - xdg-utils
+        - php7.4-bcmath
 
     # Paso 20: Configurar firewall UFW con los puertos necesarios para ISPConfig
     - name: Configurar firewall usando UFW
@@ -163,43 +195,54 @@
         msg: "Configuración del firewall UFW completada."
       when: ufw_result is succeeded
 
-    # Paso 21: Asegurar que 'server_tokens off;' esté dentro del bloque http
-    - name: Asegurar que 'server_tokens off;' esté dentro del bloque http
-      blockinfile:
-        path: /etc/nginx/nginx.conf
-        block: |
-          server_tokens off;
-        insertafter: "http {"
-      notify:
-        - Restart nginx
+    # Paso 21: Eliminar la página por defecto de Nginx
+    - name: Eliminar la página por defecto de Nginx
+      file:
+        path: /var/www/html/index.nginx-debian.html
+        state: absent
 
-    # Paso 22: Configurar Postfix para mejorar la seguridad
-    - name: Configurar Postfix para mejorar la seguridad
-      blockinfile:
-        path: /etc/postfix/main.cf
-        block: |
-          smtpd_banner = $myhostname ESMTP
-          disable_vrfy_command = yes
-          smtpd_tls_received_header = no
-          smtpd_tls_session_cache_database = btree:${data_directory}/smtpd_scache
-          smtpd_tls_loglevel = 1
-      notify:
-        - Restart postfix
+    # Paso 22: Instalar Yarn
+    - name: Instalar Yarn
+      shell: |
+        curl -sS https://dl.yarnpkg.com/debian/pubkey.gpg | sudo gpg --dearmor -o /usr/share/keyrings/yarnkey.gpg
+        echo "deb [signed-by=/usr/share/keyrings/yarnkey.gpg] https://dl.yarnpkg.com/debian stable main" | sudo tee /etc/apt/sources.list.d/yarn.list
+        apt update
+        apt install yarn
 
-    # Paso 23: Configurar Dovecot para ocultar información sensible
-    - name: Configurar Dovecot para ocultar información sensible
-      blockinfile:
-        path: /etc/dovecot/dovecot.conf
-        block: |
-          mail_privileged_group = mail
-          disable_plaintext_auth = yes
-          verbose_proctitle = no
-          mail_plugins = $mail_plugins imap
-          auth_verbose = no
-      notify:
-        - Restart dovecot
+    # Paso 23: Instalar drivers de Postgres y bcmath para PHP
+    - name: Instalar drivers de Postgres y bcmath para PHP
+      apt:
+        name: "{{ item }}"
+        state: present
+      loop:
+        - php8.2-pgsql
+        - php5.6-pgsql
+        - php7.0-pgsql
+        - php7.1-pgsql
+        - php7.2-pgsql
+        - php7.3-pgsql
+        - php7.4-pgsql
+        - php8.0-pgsql
+        - php8.1-pgsql
+        - php8.3-pgsql
+        - php8.2-bcmath
+        - php5.6-bcmath
+        - php7.0-bcmath
+        - php7.1-bcmath
+        - php7.2-bcmath
+        - php7.3-bcmath
+        - php7.4-bcmath
+        - php8.0-bcmath
+        - php8.1-bcmath
+        - php8.3-bcmath
 
-    # Paso 24: Mostrar contraseñas de ISPConfig
+    # Paso 24: Instalar supervisord
+    - name: Instalar supervisord
+      apt:
+        name: supervisor
+        state: present
+
+    # Paso 25: Mostrar contraseñas de ISPConfig
     - name: Mostrar contraseñas de ISPConfig
       shell: |
         grep -E "(Your ISPConfig admin password is|Your MySQL root password is)" /tmp/ispconfig-ai/var/log/setup-*
