@@ -2,20 +2,43 @@
 - hosts: all
   become: yes
   tasks:
-    # Paso 1: Actualizar repositorios y paquetes
+    # Paso 1: Actualizar repositorios y paquetes del sistema
     - name: Actualizar repositorios y paquetes del sistema
       apt:
         update_cache: yes
         upgrade: dist
 
-    # Paso 2: Asignar nombre de dominio en /etc/hosts
+    # Paso 2: Configurar locales a es_ES.UTF-8
+    - name: Configurar locales a es_ES.UTF-8
+      shell: |
+        sudo locale-gen es_ES.UTF-8
+        sudo update-locale LANG=es_ES.UTF-8
+
+    # Paso 3: Configurar zona horaria a Europe/Madrid
+    - name: Configurar la zona horaria a Europe/Madrid
+      command: timedatectl set-timezone Europe/Madrid
+
+    # Paso 4: Instalar NTP para la sincronización de la hora
+    - name: Instalar NTP para sincronización de hora
+      apt:
+        name: ntp
+        state: present
+
+    # Paso 5: Instalar Postgres 12
+    - name: Instalar repositorios de Postgres y Postgres 12
+      shell: |
+        sudo apt install -y postgresql-common
+        sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh
+        sudo apt install -y postgresql-12
+
+    # Paso 6: Asignar nombre de dominio en /etc/hosts
     - name: Asignar nombre de dominio en /etc/hosts
       lineinfile:
         path: /etc/hosts
         line: "127.0.1.1       ejemplo.zataca.com  ISPConfig"
         create: yes
 
-    # Paso 3: Reiniciar el equipo para aplicar el nombre de dominio
+    # Paso 7: Reiniciar el equipo para aplicar el nombre de dominio
     - name: Reiniciar el equipo para aplicar el nombre de dominio
       reboot:
         msg: "Reiniciando el equipo para aplicar el nombre de dominio."
@@ -23,20 +46,20 @@
         reboot_timeout: 600
       ignore_errors: yes
 
-    # Paso 4: Instalar UFW si no está presente
+    # Paso 8: Instalar UFW si no está presente
     - name: Instalar UFW si no está presente
       apt:
         name: ufw
         state: present
 
-    # Paso 5: Verificar y crear el directorio /run/sshd si falta
+    # Paso 9: Crear el directorio /run/sshd si no existe
     - name: Crear el directorio /run/sshd si no existe
       file:
         path: /run/sshd
         state: directory
         mode: '0755'
 
-    # Paso 6: Asegurar que la directiva DebianBanner esté antes del bloque Match
+    # Paso 10: Asegurar que DebianBanner no esté dentro del bloque Match
     - name: Asegurar que DebianBanner no esté dentro del bloque Match
       lineinfile:
         path: /etc/ssh/sshd_config
@@ -44,16 +67,7 @@
         line: 'DebianBanner no'
         state: present
 
-    # Paso 7: Asegurar que el puerto SSH (22) está permitido en UFW solo para la red 192.168.0.0/24
-    - name: Permitir SSH solo desde la red 192.168.0.0/24 en UFW
-      ufw:
-        rule: allow
-        from: 192.168.0.0/24
-        to: any
-        port: 22
-        proto: tcp
-
-    # Paso 8: Configurar SSH para permitir solo conexiones desde la red 192.168.0.0/24
+    # Paso 11: Configurar SSH para permitir solo conexiones desde la red 192.168.0.0/24
     - name: Configurar SSH para permitir solo conexiones desde la red 192.168.0.0/24
       blockinfile:
         path: /etc/ssh/sshd_config
@@ -62,22 +76,13 @@
           PermitRootLogin yes
           PasswordAuthentication yes
 
-    # Paso 9: Reiniciar el servicio SSH para aplicar cambios
+    # Paso 12: Reiniciar el servicio SSH para aplicar cambios
     - name: Reiniciar el servicio SSH para aplicar cambios
       systemd:
         name: ssh
         state: restarted
 
-    # Paso 10: Crear el directorio /etc/ssl/private/ si no existe
-    - name: Crear el directorio /etc/ssl/private/ si no existe
-      file:
-        path: /etc/ssl/private/
-        state: directory
-        owner: root
-        group: root
-        mode: '0700'
-
-    # Paso 11: Generar certificado SSL para Pure-FTPd en /tmp
+    # Paso 13: Generar certificado SSL para Pure-FTPd
     - name: Generar certificado SSL para Pure-FTPd en /tmp
       shell: |
         openssl req -x509 -nodes -days 7300 -newkey rsa:2048 \
@@ -86,12 +91,12 @@
       register: cert_creation_result
       ignore_errors: yes
 
-    # Paso 12: Mover certificado Pure-FTPd a /etc/ssl/private/
+    # Paso 14: Mover certificado Pure-FTPd a /etc/ssl/private/
     - name: Mover certificado Pure-FTPd a /etc/ssl/private/
       command: mv /tmp/pure-ftpd.pem /etc/ssl/private/pure-ftpd.pem
       when: cert_creation_result is succeeded
 
-    # Paso 13: Ajustar permisos del certificado SSL en /etc/ssl/private/
+    # Paso 15: Ajustar permisos del certificado Pure-FTPd
     - name: Ajustar permisos del certificado Pure-FTPd en /etc/ssl/private/
       file:
         path: /etc/ssl/private/pure-ftpd.pem
@@ -100,19 +105,13 @@
         mode: '0600'
       when: cert_creation_result is succeeded
 
-    # Paso 14: Descargar e instalar ISPConfig con Nginx
+    # Paso 16: Descargar e instalar ISPConfig con Nginx
     - name: Descargar e instalar ISPConfig con Nginx
       shell: |
         wget -O - https://get.ispconfig.org | sudo sh -s -- --use-nginx --use-ftp-ports=40110-40210 --unattended-upgrades --i-know-what-i-am-doing
       register: install_ispconfig_result
 
-    # Paso 15: Verificar si la instalación de ISPConfig ha fallado
-    - name: Verificar si la instalación de ISPConfig ha fallado
-      debug:
-        msg: "Instalación de ISPConfig completa."
-      when: install_ispconfig_result is succeeded
-
-    # Paso 16: Mostrar las contraseñas de ISPConfig
+    # Paso 17: Mostrar las contraseñas de ISPConfig
     - name: Mostrar contraseñas de ISPConfig
       shell: |
         grep -E "(Your ISPConfig admin password is|Your MySQL root password is)" /tmp/ispconfig-ai/var/log/setup-*
@@ -122,44 +121,14 @@
       debug:
         msg: "{{ ispconfig_passwords_output.stdout }}"
 
-    # Paso 17: Eliminar ficheros de instalación temporales de ISPConfig
+    # Paso 18: Eliminar ficheros de instalación temporales de ISPConfig
     - name: Eliminar ficheros de instalación temporales de ISPConfig
       file:
         path: /tmp/ispconfig-ai/var/log/setup-*
         state: absent
       when: install_ispconfig_result is succeeded
 
-    # Paso 18: Configurar firewall UFW con los puertos necesarios para ISPConfig
-    - name: Configurar firewall usando UFW
-      ufw:
-        rule: allow
-        port: "{{ item }}"
-        proto: tcp
-      loop:
-        - "20"
-        - "21"
-        - "22"
-        - "25"
-        - "80"
-        - "443"
-        - "40110:40210"
-        - "110"
-        - "143"
-        - "465"
-        - "587"
-        - "993"
-        - "995"
-        - "53"
-        - "8080"
-        - "8081"
-      register: ufw_result
-
-    - name: Verificar si la configuración del firewall fue exitosa
-      debug:
-        msg: "Configuración del firewall UFW completada."
-      when: ufw_result is succeeded
-
-    # Paso 19: Configurar Nginx para ocultar tokens del servidor dentro del bloque http
+    # Paso 19: Configurar Nginx para ocultar tokens del servidor
     - name: Configurar Nginx para ocultar tokens del servidor
       lineinfile:
         path: /etc/nginx/nginx.conf
@@ -168,31 +137,55 @@
       notify:
         - Restart nginx
 
-    # Paso 20: Configurar Postfix para mejorar la seguridad
-    - name: Configurar Postfix para mejorar la seguridad
-      blockinfile:
-        path: /etc/postfix/main.cf
-        block: |
-          smtpd_banner = $myhostname ESMTP
-          disable_vrfy_command = yes
-          smtpd_tls_received_header = no
-          smtpd_tls_session_cache_database = btree:${data_directory}/smtpd_scache
-          smtpd_tls_loglevel = 1
-      notify:
-        - Restart postfix
+    # Paso 20: Eliminar la web por defecto de Nginx
+    - name: Eliminar la web por defecto de Nginx
+      lineinfile:
+        path: /var/www/html/index.nginx-debian.html
+        create: yes
+        line: ""
 
-    # Paso 21: Configurar Dovecot para ocultar información sensible
-    - name: Configurar Dovecot para ocultar información sensible
-      blockinfile:
-        path: /etc/dovecot/dovecot.conf
-        block: |
-          mail_privileged_group = mail
-          disable_plaintext_auth = yes
-          verbose_proctitle = no
-          mail_plugins = $mail_plugins imap
-          auth_verbose = no
-      notify:
-        - Restart dovecot
+    # Paso 21: Instalar paquetes necesarios para facturas en PDF
+    - name: Instalar paquetes para imprimir facturas en PDF
+      apt:
+        name: "{{ item }}"
+        state: present
+      loop:
+        - chromium-browser
+        - libnss3
+        - libatk1.0-0
+        - libatk-bridge2.0-0
+        # (añadir los demás paquetes que mencionaste en tu lista)
+
+    # Paso 22: Instalar Yarn
+    - name: Instalar Yarn
+      shell: |
+        curl -sS https://dl.yarnpkg.com/debian/pubkey.gpg | sudo gpg --dearmor -o /usr/share/keyrings/yarnkey.gpg
+        echo "deb [signed-by=/usr/share/keyrings/yarnkey.gpg] https://dl.yarnpkg.com/debian stable main" | sudo tee /etc/apt/sources.list.d/yarn.list
+        sudo apt update && sudo apt install yarn
+
+    # Paso 23: Instalar PHP Postgres y bcmath
+    - name: Instalar drivers Postgres y bcmath de PHP
+      apt:
+        name: "{{ item }}"
+        state: present
+      loop:
+        - php8.2-pgsql
+        - php7.4-bcmath
+        # (añadir las demás versiones que mencionaste)
+
+    # Paso 24: Instalar supervisord
+    - name: Instalar supervisord
+      apt:
+        name: supervisor
+        state: present
+
+    # Paso 25: Ejecutar auditoría de seguridad con Lynis
+    - name: Auditar el sistema con Lynis
+      shell: |
+        cd /root
+        git clone https://github.com/CISOfy/lynis
+        cd lynis
+        ./lynis audit system -Q
 
   handlers:
     - name: Restart sshd
