@@ -16,9 +16,9 @@
 
     # Paso 3: Generar PSK para Zabbix Agent
     - name: Generar archivo PSK para Zabbix
-      command: openssl rand -hex 32 > /etc/zabbix/zabbix_secret.psk
-      register: psk_result
+      shell: openssl rand -hex 32 > /etc/zabbix/zabbix_secret.psk
 
+    # Paso 4: Ajustar permisos del archivo PSK
     - name: Ajustar permisos del archivo PSK
       file:
         path: /etc/zabbix/zabbix_secret.psk
@@ -26,7 +26,7 @@
         group: zabbix
         mode: '0640'
 
-    # Paso 4: Configurar Zabbix Agent
+    # Paso 5: Configurar Zabbix Agent
     - name: Configurar Zabbix Agent con PSK
       lineinfile:
         path: /etc/zabbix/zabbix_agentd.conf
@@ -42,13 +42,14 @@
         - { regexp: '^# TLSPSKIdentity=', line: 'TLSPSKIdentity={{ inventory_hostname }}' }
         - { regexp: '^# TLSPSKFile=', line: 'TLSPSKFile=/etc/zabbix/zabbix_secret.psk' }
 
-    # Paso 5: Reiniciar el servicio Zabbix Agent
+    # Paso 6: Reiniciar el servicio Zabbix Agent
     - name: Reiniciar Zabbix Agent para aplicar cambios
       systemd:
         name: zabbix-agent
         state: restarted
 
-    # Paso 6: Mostrar PSK en el log de Ansible
+    # Paso 7: Mostrar PSK en el log de Ansible
     - name: Mostrar PSK generado en el log de Ansible
       debug:
         msg: "PSK generado: {{ lookup('file', '/etc/zabbix/zabbix_secret.psk') }}"
+
