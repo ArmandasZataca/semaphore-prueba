@@ -8,25 +8,30 @@
         update_cache: yes
         upgrade: dist
 
-    # Paso 2: Instalar el agente Zabbix
+    # Paso 2: Instalar Zabbix Agent
     - name: Instalar Zabbix Agent
       apt:
         name: zabbix-agent
         state: present
 
-    # Paso 3: Generar PSK para Zabbix Agent
+    # Paso 3: Generar archivo PSK para Zabbix
     - name: Generar archivo PSK para Zabbix
-      shell: openssl rand -hex 32 > /etc/zabbix/zabbix_secret.psk
+      command: "openssl rand -hex 64 > /etc/zabbix/encrypt.psk"
+      register: psk_result
 
-    # Paso 4: Ajustar permisos del archivo PSK
+    # Paso 4: Mover archivo PSK a la ubicación correcta y ajustar permisos
+    - name: Mover archivo PSK a la ubicación correcta
+      command: mv /etc/zabbix/encrypt.psk /etc/zabbix/
+      ignore_errors: yes
+
     - name: Ajustar permisos del archivo PSK
       file:
-        path: /etc/zabbix/zabbix_secret.psk
+        path: /etc/zabbix/encrypt.psk
         owner: zabbix
         group: zabbix
         mode: '0640'
 
-    # Paso 5: Configurar Zabbix Agent
+    # Paso 5: Configurar Zabbix Agent con PSK
     - name: Configurar Zabbix Agent con PSK
       lineinfile:
         path: /etc/zabbix/zabbix_agentd.conf
@@ -34,26 +39,23 @@
         line: "{{ item.line }}"
       loop:
         - { regexp: '^Server=', line: 'Server=192.168.0.149' }
+        - { regexp: '^ListenPort=', line: 'ListenPort=10050' }
         - { regexp: '^ServerActive=', line: 'ServerActive=192.168.0.149' }
-        - { regexp: '^# HostnameItem=system.hostname', line: 'HostnameItem=system.hostname' }
         - { regexp: '^Hostname=', line: 'Hostname={{ ansible_hostname }}' }
-        - { regexp: '^# TLSConnect=', line: 'TLSConnect=psk' }
-        - { regexp: '^# TLSAccept=', line: 'TLSAccept=psk' }
-        - { regexp: '^# TLSPSKIdentity=', line: 'TLSPSKIdentity={{ ansible_hostname }}' }
-        - { regexp: '^# TLSPSKFile=', line: 'TLSPSKFile=/etc/zabbix/zabbix_secret.psk' }
+        - { regexp: '^HostnameItem=', line: 'HostnameItem=system.hostname' }
+        - { regexp: '^TLSConnect=', line: 'TLSConnect=psk' }
+        - { regexp: '^TLSAccept=', line: 'TLSAccept=psk' }
+        - { regexp: '^TLSPSKIdentity=', line: 'TLSPSKIdentity={{ ansible_hostname }}' }
+        - { regexp: '^TLSPSKFile=', line: 'TLSPSKFile=/etc/zabbix/encrypt.psk' }
 
-    # Paso 6: Reiniciar el servicio Zabbix Agent
+    # Paso 6: Reiniciar Zabbix Agent para aplicar cambios
     - name: Reiniciar Zabbix Agent para aplicar cambios
       systemd:
         name: zabbix-agent
         state: restarted
 
-    # Paso 7: Leer el archivo PSK y mostrarlo
-    - name: Obtener el contenido del PSK generado
-      slurp:
-        src: /etc/zabbix/zabbix_secret.psk
-      register: psk_content
-
-    - name: Mostrar el PSK en el log de Ansible
+    # Paso 7: Mostrar PSK generado en el log de Ansible
+    - name: Mostrar PSK generado en el log de Ansible
       debug:
-        msg: "PSK generado: {{ psk_content['content'] | b64decode }}"
+        var: psk_result.stdout
+
