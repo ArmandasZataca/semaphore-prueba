@@ -16,14 +16,10 @@
 
     # Paso 3: Generar archivo PSK para Zabbix
     - name: Generar archivo PSK para Zabbix
-      command: "openssl rand -hex 64 > /etc/zabbix/encrypt.psk"
+      shell: "openssl rand -hex 64 > /etc/zabbix/encrypt.psk"
       register: psk_result
 
-    # Paso 4: Mover archivo PSK a la ubicación correcta y ajustar permisos
-    - name: Mover archivo PSK a la ubicación correcta
-      command: mv /etc/zabbix/encrypt.psk /etc/zabbix/
-      ignore_errors: yes
-
+    # Paso 4: Ajustar permisos del archivo PSK
     - name: Ajustar permisos del archivo PSK
       file:
         path: /etc/zabbix/encrypt.psk
