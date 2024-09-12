@@ -1,50 +1,54 @@
+---
 - hosts: all
   become: yes
   tasks:
-    # Paso 1: Instalar Zabbix Agent
+    # Paso 1: Actualizar repositorios y paquetes del sistema
+    - name: Actualizar repositorios y paquetes del sistema
+      apt:
+        update_cache: yes
+        upgrade: dist
+
+    # Paso 2: Instalar el agente Zabbix
     - name: Instalar Zabbix Agent
       apt:
         name: zabbix-agent
         state: present
 
-    # Paso 2: Configurar la opción Server en zabbix_agentd.conf
-    - name: Configurar Server en zabbix_agentd.conf
+    # Paso 3: Generar PSK para Zabbix Agent
+    - name: Generar archivo PSK para Zabbix
+      command: openssl rand -hex 32 > /etc/zabbix/zabbix_secret.psk
+      register: psk_result
+
+    - name: Ajustar permisos del archivo PSK
+      file:
+        path: /etc/zabbix/zabbix_secret.psk
+        owner: zabbix
+        group: zabbix
+        mode: '0640'
+
+    # Paso 4: Configurar Zabbix Agent
+    - name: Configurar Zabbix Agent con PSK
       lineinfile:
         path: /etc/zabbix/zabbix_agentd.conf
-        regexp: '^Server='
-        line: 'Server=192.168.0.149'
-      notify:
-        - Reiniciar zabbix-agent
+        regexp: "{{ item.regexp }}"
+        line: "{{ item.line }}"
+      loop:
+        - { regexp: '^Server=', line: 'Server=192.168.0.149' }
+        - { regexp: '^ServerActive=', line: 'ServerActive=192.168.0.149' }
+        - { regexp: '^# HostnameItem=system.hostname', line: 'HostnameItem=system.hostname' }
+        - { regexp: '^Hostname=', line: 'Hostname={{ inventory_hostname }}' }
+        - { regexp: '^# TLSConnect=', line: 'TLSConnect=psk' }
+        - { regexp: '^# TLSAccept=', line: 'TLSAccept=psk' }
+        - { regexp: '^# TLSPSKIdentity=', line: 'TLSPSKIdentity={{ inventory_hostname }}' }
+        - { regexp: '^# TLSPSKFile=', line: 'TLSPSKFile=/etc/zabbix/zabbix_secret.psk' }
 
-    # Paso 3: Configurar la opción ServerActive en zabbix_agentd.conf
-    - name: Configurar ServerActive en zabbix_agentd.conf
-      lineinfile:
-        path: /etc/zabbix/zabbix_agentd.conf
-        regexp: '^ServerActive='
-        line: 'ServerActive=192.168.0.149'
-      notify:
-        - Reiniciar zabbix-agent
-
-    # Paso 4: Configurar Hostname a ser el hostname del sistema
-    - name: Configurar Hostname en zabbix_agentd.conf
-      lineinfile:
-        path: /etc/zabbix/zabbix_agentd.conf
-        regexp: '^Hostname='
-        line: "Hostname={{ ansible_hostname }}"
-      notify:
-        - Reiniciar zabbix-agent
-
-    # Paso 5: Descomentar la línea HostnameItem
-    - name: Descomentar HostnameItem en zabbix_agentd.conf
-      lineinfile:
-        path: /etc/zabbix/zabbix_agentd.conf
-        regexp: '^# HostnameItem=system.hostname'
-        line: 'HostnameItem=system.hostname'
-      notify:
-        - Reiniciar zabbix-agent
-
-  handlers:
-    - name: Reiniciar zabbix-agent
+    # Paso 5: Reiniciar el servicio Zabbix Agent
+    - name: Reiniciar Zabbix Agent para aplicar cambios
       systemd:
         name: zabbix-agent
         state: restarted
+
+    # Paso 6: Mostrar PSK en el log de Ansible
+    - name: Mostrar PSK generado en el log de Ansible
+      debug:
+        msg: "PSK generado: {{ lookup('file', '/etc/zabbix/zabbix_secret.psk') }}"
