@@ -1,0 +1,50 @@
+- hosts: all
+  become: yes
+  tasks:
+    # Paso 1: Instalar Zabbix Agent
+    - name: Instalar Zabbix Agent
+      apt:
+        name: zabbix-agent
+        state: present
+
+    # Paso 2: Configurar la opción Server en zabbix_agentd.conf
+    - name: Configurar Server en zabbix_agentd.conf
+      lineinfile:
+        path: /etc/zabbix/zabbix_agentd.conf
+        regexp: '^Server='
+        line: 'Server=192.168.0.149'
+      notify:
+        - Reiniciar zabbix-agent
+
+    # Paso 3: Configurar la opción ServerActive en zabbix_agentd.conf
+    - name: Configurar ServerActive en zabbix_agentd.conf
+      lineinfile:
+        path: /etc/zabbix/zabbix_agentd.conf
+        regexp: '^ServerActive='
+        line: 'ServerActive=192.168.0.149'
+      notify:
+        - Reiniciar zabbix-agent
+
+    # Paso 4: Configurar Hostname a ser el hostname del sistema
+    - name: Configurar Hostname en zabbix_agentd.conf
+      lineinfile:
+        path: /etc/zabbix/zabbix_agentd.conf
+        regexp: '^Hostname='
+        line: "Hostname={{ ansible_hostname }}"
+      notify:
+        - Reiniciar zabbix-agent
+
+    # Paso 5: Descomentar la línea HostnameItem
+    - name: Descomentar HostnameItem en zabbix_agentd.conf
+      lineinfile:
+        path: /etc/zabbix/zabbix_agentd.conf
+        regexp: '^# HostnameItem=system.hostname'
+        line: 'HostnameItem=system.hostname'
+      notify:
+        - Reiniciar zabbix-agent
+
+  handlers:
+    - name: Reiniciar zabbix-agent
+      systemd:
+        name: zabbix-agent
+        state: restarted
