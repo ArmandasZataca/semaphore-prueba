@@ -48,8 +48,12 @@
         name: zabbix-agent
         state: restarted
 
-    # Paso 7: Mostrar PSK en el log de Ansible
-    - name: Mostrar PSK generado en el log de Ansible
-      debug:
-        msg: "PSK generado: {{ lookup('file', '/etc/zabbix/zabbix_secret.psk') }}"
+    # Paso 7: Leer el archivo PSK y mostrarlo
+    - name: Obtener el contenido del PSK generado
+      slurp:
+        src: /etc/zabbix/zabbix_secret.psk
+      register: psk_content
 
+    - name: Mostrar el PSK en el log de Ansible
+      debug:
+        msg: "PSK generado: {{ psk_content['content'] | b64decode }}"
