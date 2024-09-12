@@ -36,10 +36,10 @@
         - { regexp: '^Server=', line: 'Server=192.168.0.149' }
         - { regexp: '^ServerActive=', line: 'ServerActive=192.168.0.149' }
         - { regexp: '^# HostnameItem=system.hostname', line: 'HostnameItem=system.hostname' }
-        - { regexp: '^Hostname=', line: 'Hostname={{ inventory_hostname }}' }
+        - { regexp: '^Hostname=', line: 'Hostname={{ ansible_hostname }}' }
         - { regexp: '^# TLSConnect=', line: 'TLSConnect=psk' }
         - { regexp: '^# TLSAccept=', line: 'TLSAccept=psk' }
-        - { regexp: '^# TLSPSKIdentity=', line: 'TLSPSKIdentity={{ inventory_hostname }}' }
+        - { regexp: '^# TLSPSKIdentity=', line: 'TLSPSKIdentity={{ ansible_hostname }}' }
         - { regexp: '^# TLSPSKFile=', line: 'TLSPSKFile=/etc/zabbix/zabbix_secret.psk' }
 
     # Paso 6: Reiniciar el servicio Zabbix Agent
