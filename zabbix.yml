@@ -14,15 +14,16 @@
         name: zabbix-agent
         state: present
 
-    # Paso 3: Generar archivo PSK para Zabbix
+    # Paso 3: Generar archivo PSK para Zabbix y guardar en variable
     - name: Generar archivo PSK para Zabbix
-      shell: "openssl rand -hex 64 > /etc/zabbix/encrypt.psk"
+      command: "openssl rand -hex 64"
       register: psk_result
 
-    # Paso 4: Ajustar permisos del archivo PSK
-    - name: Ajustar permisos del archivo PSK
-      file:
-        path: /etc/zabbix/encrypt.psk
+    # Paso 4: Guardar el PSK en un archivo
+    - name: Guardar PSK en archivo
+      copy:
+        content: "{{ psk_result.stdout }}"
+        dest: /etc/zabbix/encrypt.psk
         owner: zabbix
         group: zabbix
         mode: '0640'
@@ -54,4 +55,3 @@
     - name: Mostrar PSK generado en el log de Ansible
       debug:
         var: psk_result.stdout
-
